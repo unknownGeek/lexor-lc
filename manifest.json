@@ -1,0 +1,30 @@
+{
+    "manifest_version": 3,
+    "name": "Exness Lot Size Blocker",
+    "description": "This extension blocks trades that exceed max lot size for specific symbols.",
+    "version": "1.0",
+    "icons": {
+      "16": "icons/icon.png",
+      "48": "icons/icon.png",
+      "128": "icons/icon.png"
+    },
+    "permissions": [
+      "activeTab",
+      "storage"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["*://my.exness.com/*"],  
+        "js": ["content.js"],
+        "run_at": "document_idle"
+      }
+    ],
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": "icons/icon.png"
+    }
+  }
+  
