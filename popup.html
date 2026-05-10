@@ -22,16 +22,36 @@
   </style>
 </head>
 <body>
-  <h3>Max Lot Sizes by Symbol</h3>
-  <table id="lotSizeTable">
-    <thead>
-      <tr>
-        <th>Symbol</th>
-        <th>Max Lot Size</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h3>Problem Description Extractor</h3>
+  <p>Click the button to extract and save the problem description from the current LeetCode tab.</p>
+  <button id="extractBtn">Extract & Save</button>
+  <button id="previewBtn" style="margin-left:8px">Preview</button>
+  <div style="margin-top:10px;color:#333">
+    <label><input type="checkbox" id="autoExtract"> Auto-extract when page loads</label><br>
+    <label><input type="checkbox" id="includeTimestamp"> Append timestamp to filename</label>
+    <br>
+    <label><input type="checkbox" id="includeCode"> Include code snippets</label>
+    <div style="margin-left:18px;margin-top:6px">
+      <label><input type="checkbox" class="lang" value="java" id="lang_java"> Java</label><br>
+      <label><input type="checkbox" class="lang" value="python" id="lang_python"> Python</label><br>
+      <label><input type="checkbox" class="lang" value="cpp" id="lang_cpp"> C++</label>
+    </div>
+  </div>
+  <div id="status" style="margin-top:10px;color:#333"></div>
+  <div id="previewArea" style="margin-top:8px;display:none">
+    <h4>Preview</h4>
+    <textarea id="previewText" style="width:100%;height:220px;font-family:monospace;font-size:12px"></textarea>
+    <h5 style="margin-top:8px">Debug candidates</h5>
+    <pre id="previewDebug" style="width:100%;height:140px;overflow:auto;padding:8px;background:#111;color:#bcd;font-size:12px"></pre>
+  </div>
+  <h4 style="margin-top:12px">Download history</h4>
+  <div id="history" style="max-height:200px;overflow:auto;border:1px solid #ddd;padding:6px;background:#fafafa"></div>
+  <button id="clearHistory" style="margin-top:6px">Clear history</button>
+  <div style="margin-top:10px;font-size:12px;color:#444">
+    <p>If Chrome asks where to save files, disable <strong>Ask where to save each file before downloading</strong> in Chrome settings so downloads are saved automatically.</p>
+    <button id="openDownloadsSettings" style="font-size:12px">Open Chrome Downloads settings</button>
+    <div id="settingsStatus" style="margin-top:6px;color:#666;font-size:12px"></div>
+  </div>
 
   <script src="popup.js"></script>
 </body>

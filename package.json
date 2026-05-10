@@ -1,0 +1,11 @@
+{
+  "name": "problem-description-extractor",
+  "version": "0.1.0",
+  "description": "Sanitizer and extractor for LeetCode problem descriptions",
+  "scripts": {
+    "test": "node test/run_tests.js"
+  },
+  "devDependencies": {
+    "jsdom": "^22.1.0"
+  }
+}

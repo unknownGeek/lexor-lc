@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "name": "Exness Lot Size Blocker",
-    "description": "This extension blocks trades that exceed max lot size for specific symbols.",
+    "name": "Problem Description Extractor",
+    "description": "Extracts and saves sanitized problem descriptions from LeetCode pages to Downloads/lexor-lc/.",
     "version": "1.0",
     "icons": {
       "16": "icons/icon.png",
@@ -10,15 +10,18 @@
     },
     "permissions": [
       "activeTab",
-      "storage"
+      "scripting",
+      "storage",
+      "downloads",
+      "notifications"
     ],
     "background": {
       "service_worker": "background.js"
     },
     "content_scripts": [
       {
-        "matches": ["*://my.exness.com/*"],  
-        "js": ["content.js"],
+        "matches": ["*://leetcode.com/*", "*://*.leetcode.com/*"],
+        "js": ["webpage_format/sanitizer_core.js", "webpage_content_extractor.js"],
         "run_at": "document_idle"
       }
     ],

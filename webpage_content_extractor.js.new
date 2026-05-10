@@ -1,0 +1,177 @@
+// Clean deterministic content extractor for LeetCode-like pages
+
+(function(){
+  'use strict';
+
+  // --- Utilities ----------------------------------------------------------
+  function safeCall(fn, fallback) {
+    try { return fn(); } catch (e) { console.warn('safeCall error', e); return fallback; }
+  }
+
+  function decodeHtmlEntities(text) { if (!text) return text; const d = document.createElement('div'); d.innerHTML = text; return d.textContent || d.innerText || text; }
+
+  function normalizeCode(text) {
+    if (!text) return text;
+    let t = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    t = decodeHtmlEntities(t);
+    let lines = t.split('\n');
+    while (lines.length && lines[0].trim() === '') lines.shift();
+    while (lines.length && lines[lines.length-1].trim() === '') lines.pop();
+    let minIndent = null;
+    lines.forEach(l => {
+      const m = l.match(/^[ \t]*/);
+      if (m) {
+        const len = m[0].replace(/\t/g,'    ').length;
+        if (l.trim() !== '') { if (minIndent === null || len < minIndent) minIndent = len; }
+      }
+    });
+    if (minIndent === null) minIndent = 0;
+    if (minIndent > 0) {
+      const re = new RegExp('^[ \t]{0,' + minIndent + '}');
+      lines = lines.map(l => l.replace(re, ''));
+    }
+    return lines.join('\n').trim();
+  }
+
+  function sanitizeFilename(text) {
+    if (!text) return 'problem';
+    text = text.replace(/[\u200b-\u200f\u202a-\u202e\ufeff\u2060\u00ad]/g, '');
+    try { text = text.normalize('NFKD'); } catch(e){}
+    text = text.replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '');
+    return (text || 'problem').slice(0,80);
+  }
+
+  // --- Problem extraction -----------------------------------------------
+  function extractProblemStatementFromContainer(container) {
+    if (window.sanitizerCore && typeof window.sanitizerCore.extractProblemStatementFromContainer === 'function') {
+      return safeCall(() => window.sanitizerCore.extractProblemStatementFromContainer(container), null);
+    }
+    return container ? (container.innerText || '').trim() : null;
+  }
+
+  function findProblemName(container) {
+    const h1 = document.querySelector('h1') || document.querySelector('.css-1v3d1xg');
+    if (h1 && h1.textContent) return sanitizeFilename(h1.textContent);
+    if (document.title) return sanitizeFilename(document.title);
+    return 'problem';
+  }
+
+  function getProblemSlugFromUrl() {
+    try {
+      const path = location.pathname || '';
+      const m = path.match(/\/problems\/([^\/]+)\/?/i);
+      if (m && m[1]) return sanitizeFilename(decodeURIComponent(m[1]));
+    } catch (e) {}
+    return null;
+  }
+
+  // --- Java detection / fallback ----------------------------------------
+  function findExplicitJavaCode(container) {
+    try {
+      const roots = [];
+      if (container) { container.querySelectorAll('div[class*="example"], .example').forEach(el => roots.push(el)); roots.push(container); }
+      const selectors = ['pre code','pre','code','[data-language="java"]','[data-lang="java"]','.language-java','.lang-java'];
+      for (const root of roots) {
+        for (const sel of selectors) {
+          const els = root.querySelectorAll(sel);
+          for (const el of els) {
+            const txt = (el.textContent||'').trim(); if (!txt) continue;
+            const lower = txt.toLowerCase();
+            if (lower.includes('class solution') || lower.includes('public class') || lower.includes('public static') || lower.includes('system.out') || /import\s+java\./.test(lower)) return txt;
+          }
+        }
+      }
+      const editorSelectors = ['.react-monaco-editor-container','.monaco-editor','.submission__code','.editor','[data-language]'];
+      for (const sel of editorSelectors) {
+        const els = document.querySelectorAll(sel);
+        for (const el of els) {
+          const t = (el.textContent||'').trim(); if (t && (t.toLowerCase().includes('class solution') || t.toLowerCase().includes('public class'))) return t;
+        }
+      }
+    } catch (e) { console.warn('findExplicitJavaCode error', e); }
+    return null;
+  }
+
+  function javaTemplate(problemName) {
+    const comment = problemName ? `// Java solution template for ${problemName}` : `// Java solution template`;
+    return `${comment}\nclass Solution {\n    public int solve() {\n        // TODO implement\n        return 0;\n    }\n}\n`;
+  }
+
+  // --- Filename handling ------------------------------------------------
+  function makeFilename(base) {
+    return new Promise((resolve) => {
+      if (!chrome || !chrome.storage) { resolve(base + '.txt'); return; }
+      chrome.storage.local.get({ includeTimestamp: false }, (items) => {
+        const ts = items.includeTimestamp ? '_' + new Date().toISOString().replace(/[:.]/g,'-') : '';
+        resolve(base + ts + '.txt');
+      });
+    });
+  }
+
+  // --- Save / messaging -------------------------------------------------
+  function sendSave(filename, content) {
+    chrome.runtime.sendMessage({ type: 'SAVE_PROBLEM_DESCRIPTION', filename, content }, (resp) => {
+      if (chrome.runtime.lastError) console.error('Save failed:', chrome.runtime.lastError);
+      else console.log('Saved:', resp);
+    });
+  }
+
+  function buildContentWithJava(container, includeCode, allowedLangs) {
+    const sanitized = extractProblemStatementFromContainer(container) || '';
+    let content = sanitized;
+    if (includeCode) {
+      const explicit = findExplicitJavaCode(container);
+      if (explicit) content += '\n\nJava code snippet:\n```java\n' + normalizeCode(explicit) + '\n```';
+      else { const name = getProblemSlugFromUrl() || findProblemName(container); content += '\n\n' + javaTemplate(name); }
+    } else {
+      // still ensure java template present per requirement
+      const name = getProblemSlugFromUrl() || findProblemName(container); content += '\n\n' + javaTemplate(name);
+    }
+    return content;
+  }
+
+  function prepareAndSend() {
+    const container = document.querySelector('div.HTMLContent_html__0OZLp[data-track-load="description_content"]') || document.querySelector('div[data-track-load="description_content"]');
+    if (!container) { console.warn('Problem description container not found'); return; }
+    chrome.storage.local.get({ includeCode: true, languages: ['java'] }, (items) => {
+      const includeCode = Boolean(items.includeCode);
+      const allowed = (items.languages || ['java']).map(s => s.toLowerCase());
+      const content = buildContentWithJava(container, includeCode, allowed);
+      const slug = getProblemSlugFromUrl(); const problemName = slug || findProblemName(container);
+      makeFilename('lexor-lc/problem_description_' + problemName).then(fn => sendSave(fn, content));
+    });
+  }
+
+  // --- Preview handler --------------------------------------------------
+  chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+    if (req && req.type === 'PREVIEW_PROBLEM_DESCRIPTION') {
+      const container = document.querySelector('div.HTMLContent_html__0OZLp[data-track-load="description_content"]') || document.querySelector('div[data-track-load="description_content"]');
+      if (!container) { sendResponse({ content: null }); return true; }
+      const sanitized = extractProblemStatementFromContainer(container) || '';
+      const explicit = findExplicitJavaCode(container);
+      const debug = { foundExplicitJava: Boolean(explicit), explicitSnippet: explicit ? explicit.slice(0,500) : null };
+      const name = getProblemSlugFromUrl() || findProblemName(container);
+      const content = sanitized + '\n\n' + (explicit ? ('Java code snippet:\n```java\n' + normalizeCode(explicit) + '\n```') : javaTemplate(name));
+      sendResponse({ content, debug });
+      return true;
+    }
+    if (req && req.type === 'EXTRACT_PROBLEM_DESCRIPTION') { prepareAndSend(); sendResponse({ ok: true }); return; }
+  });
+
+  // --- Auto-extract on page load / mutations ------------------------------
+  window.addEventListener('load', () => setTimeout(() => {
+    chrome && chrome.storage ? chrome.storage.local.get({ autoExtract: true }, (items) => { if (items.autoExtract) prepareAndSend(); }) : prepareAndSend();
+  }, 1500));
+
+  const pageObserver = new MutationObserver((mutations, obs) => {
+    const container = document.querySelector('div.HTMLContent_html__0OZLp[data-track-load="description_content"]') || document.querySelector('div[data-track-load="description_content"]');
+    if (container) { shouldAutoExtract((enabled) => { if (enabled) prepareAndSend(); obs.disconnect(); }); }
+  });
+  pageObserver.observe(document.documentElement || document.body, { childList: true, subtree: true });
+
+  function shouldAutoExtract(cb) {
+    if (!chrome || !chrome.storage) { cb(true); return; }
+    chrome.storage.local.get({ autoExtract: true }, (items) => cb(Boolean(items.autoExtract)));
+  }
+
+})();
